@@ -1,0 +1,17 @@
+{
+  "name": "chemical-x",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Order-flow research and paper trading terminal for Kalshi short-duration markets",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node --use-env-proxy --watch server.js",
+    "start": "node --use-env-proxy server.js",
+    "test": "node --test",
+    "check": "node --check server.js && node --check public/app.js && node --check lib/engine.js && node --check lib/feeds.js",
+    "launch": "node scripts/launch.js"
+  }
+}
