@@ -35,7 +35,11 @@ test('HTTP workflow: snapshot → gated entry → duplicate rejection → settle
     await stop(); await start();
     assert.equal((await request('/api/snapshot')).data.stats.settled, 1);
     assert.equal((await request('/api/automation', { enabled: true })).data.automation.enabled, true);
-    assert.ok((await request('/api/snapshot')).data.stats.open > 0);
+    const scanned = (await request('/api/snapshot')).data;
+    assert.ok(scanned.stats.open > 0);
+    assert.equal(scanned.automation.report.scanned, 6);
+    assert.ok(scanned.automation.report.opened > 0);
+    assert.ok(scanned.automation.report.blocked.every(item => item.reasons.length > 0));
     await request('/api/automation', { enabled: false });
     assert.equal((await request('/api/snapshot')).data.automation.enabled, false);
     assert.equal((await request('/api/settings', { settings: { maxEntry: -1 }, customTickers: [] })).status, 400);

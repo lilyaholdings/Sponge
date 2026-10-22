@@ -1,8 +1,11 @@
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-if (Number(process.versions.node.split('.')[0]) < 24) {
-  console.error('Chemical X requires Node.js 24 or newer. Install it, then run this launcher again.');
+import { runtimeError } from './runtime.js';
+
+const error = runtimeError(process.version);
+if (error) {
+  console.error(error);
   process.exit(1);
 }
 const root = fileURLToPath(new URL('../', import.meta.url));

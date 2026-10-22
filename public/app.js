@@ -27,7 +27,17 @@ function bar(value) { return `<svg class="imbalance-bar" viewBox="0 0 100 5" pre
 function header(title, description, actions = '') {
   return `<div class="page-heading"><div><div class="eyebrow">THE SHORT-TERM ADVANTAGE</div><h1>${title}</h1><p>${description}</p></div><div class="heading-actions">${actions}<select class="feed-select" id="mode-select" aria-label="Market data source"><option value="demo" ${mode === 'demo' ? 'selected' : ''}>◉ Simulation</option><option value="live" ${mode === 'live' ? 'selected' : ''}>◉ Kalshi live</option></select></div></div>`;
 }
-function banner() { return `<div class="simulation-banner"><span>◈</span>${mode === 'demo' ? '<strong>SIMULATED FEED</strong> Synthetic prices & outcomes. Research interface preview; not historical performance.' : '<strong>PUBLIC MARKET DATA</strong> 10-second polling. Paper execution only. Signal scores are uncalibrated.'}</div>${snapshot.automation.enabled ? `<div class="notice">ϟ Paper bot running · scans every 10 seconds · max ${money(snapshot.settings.maxExposure)} open exposure.${snapshot.automation.error ? ' Last scan failed: ' + escape(snapshot.automation.error) : ''} The bot stops on server restart.</div>` : ''}${snapshot.feedError ? `<div class="notice" role="alert">${escape(snapshot.feedError)}</div>` : ''}`; }
+function banner() {
+  const bot = snapshot.automation, report = bot.report;
+  const blockers = report?.blocked.flatMap(item => item.reasons) || [];
+  const summary = [...new Set(blockers)].join(' · ');
+  return `<div class="simulation-banner"><span>◈</span>${mode === 'demo' ? '<strong>SIMULATED FEED</strong> Synthetic prices & outcomes. Switch to Kalshi live for real market data.' : '<strong>LIVE KALSHI DATA / PAPER ORDERS</strong> Real prices; simulated positions. This app does not submit real-money orders.'}</div>
+    ${bot.enabled ? `<div class="notice">${bot.error ? 'Paper bot waiting for data' : 'Paper bot scanning every 10 seconds'} · max ${money(snapshot.settings.maxExposure)} open exposure.
+    ${report ? `<br>Last scan: ${report.scanned} markets · ${report.qualified} qualified · ${report.opened} paper positions opened.${summary ? `<br>Entry blockers: ${escape(summary)}` : ''}` : ''}
+    ${bot.error ? '<br>' + escape(bot.error) : ''}</div>` : ''}
+    ${snapshot.feedError ? `<div class="notice" role="alert">${escape(snapshot.feedError)} <button class="button small" id="retry-feed">Retry connection</button></div>` : ''}
+    ${(snapshot.feedWarnings || []).map(w => `<div class="notice" role="status">${escape(w)}</div>`).join('')}`;
+}
 function metrics() {
   const s = snapshot.stats, signals = snapshot.markets.filter(m => m.signal.state === 'signal'), best = signals.length ? Math.max(...signals.map(m => m.signal.edge)) : null;
   return `<div class="metrics">
@@ -54,7 +64,7 @@ function detail() {
   <div class="subheading">DEPTH OF MARKET <span>TOP 4 LEVELS</span></div><table class="book-table"><thead><tr><th>YES BID</th><th>SIZE</th><th>NO BID</th><th>SIZE</th></tr></thead><tbody>${Array.from({ length: 4 }, (_, i) => `<tr><td>${num(m.yesBids[i]?.[0], 0)}¢</td><td>${m.yesBids[i] ? compact(m.yesBids[i][1]) : '—'}</td><td>${num(m.noBids[i]?.[0], 0)}¢</td><td>${m.noBids[i] ? compact(m.noBids[i][1]) : '—'}</td></tr>`).join('')}</tbody></table></div>
   <div class="detail-foot"><button class="button primary" data-trade="${escape(m.ticker)}" ${s.state !== 'signal' || hasPosition || busy ? 'disabled' : ''}>${hasPosition ? '✓ Position recorded' : `Paper buy ${s.side.toUpperCase()} · ${num(s.entry, 0)}¢`} <span>↗</span></button><p>${s.reasons.length ? escape(s.reasons.join(' · ')) : `Up to ${money(snapshot.settings.maxPosition)} · displayed depth capped · est. fees included`}</p><button class="rules-button" data-rules="${escape(m.ticker)}">Settlement rules & methodology ↗</button></div></aside>`;
 }
-function botButton() { return `<button class="button ${snapshot.automation.enabled ? '' : 'primary'}" id="bot-button">${snapshot.automation.enabled ? '■ Stop paper bot' : 'ϟ Start paper bot'}</button>`; }
+function botButton() { return `<button class="button ${snapshot.automation.enabled ? '' : 'primary'}" id="bot-button" ${!snapshot.automation.enabled && (snapshot.feedError || !snapshot.markets.length) ? 'disabled title="Market data is required before starting the paper bot"' : ''}>${snapshot.automation.enabled ? '■ Stop paper bot' : 'ϟ Start paper bot'}</button>`; }
 function renderRadar() {
   const markets = snapshot.markets.filter(m => (filter === 'All markets' || filter === 'Signals' && m.signal.state === 'signal' || m.category === filter) && `${m.asset} ${m.title}`.toLowerCase().includes(search.toLowerCase()));
   return header('Market radar', 'Read the flow. Find your edge. Get ahead of settlement.', botButton() + '<button class="button" id="pause-button">'+(paused ? '▶ Resume feed' : 'Ⅱ Pause feed')+'</button>') + banner() + metrics() + `<div class="section-bar"><div class="tabs" role="group" aria-label="Filter markets">${['All markets', 'Crypto', 'Financial', 'Signals'].map(f => `<button class="tab ${filter === f ? 'active' : ''}" data-filter="${f}">${f}${f === 'All markets' ? `<span>${snapshot.markets.length}</span>` : ''}</button>`).join('')}</div><div class="section-meta"><input class="search" id="search" type="search" placeholder="Search markets…" aria-label="Search markets" value="${escape(search)}"></div></div><div class="radar-layout"><div><div class="market-grid">${markets.map(marketCard).join('') || '<div class="empty"><div class="empty-icon">⌖</div><h3>No matching markets</h3><p>Adjust your filters or check the data connection.</p></div>'}</div><div class="note-strip"><span>⌁</span><span><b>CONVICTION, WITH CONSTRAINTS.</b> Entry ≤ ${snapshot.settings.maxEntry}¢ · net edge ≥ ${snapshot.settings.minEdge}¢ · score ≥ ${snapshot.settings.minScore}%. Scores are research estimates, not validated settlement probabilities.</span></div></div>${detail()}</div>`;
@@ -98,7 +108,7 @@ async function refresh(force = false) {
     if (sequence !== refreshSequence) return;
     snapshot = data;
     lastClientTime = Date.now();
-    $('#feed-status').textContent = data.feedError ? 'Live feed disconnected' : mode === 'demo' ? 'Simulation engine connected' : 'Kalshi public feed connected';
+    $('#feed-status').textContent = data.feedError ? 'Live feed disconnected' : mode === 'demo' ? 'Simulation engine connected' : data.feedWarnings?.length ? 'Kalshi feed connected · check warnings' : 'Kalshi public feed connected';
     $('#updated').textContent = `SYNC ${new Date().toLocaleTimeString('en-GB', { timeZone: 'UTC' })} UTC`;
     if (view !== 'settings' || force) {
       const input = document.activeElement?.id === 'search';
@@ -134,7 +144,8 @@ document.addEventListener('click', async event => {
   if (el.id === 'modal-close') return $('#modal').close();
   if (el.id === 'help-button') return modal('Chemical X / Research terminal', 'Order flow. Entry discipline. Measured outcomes.\n\nChemical X is an original paper-trading research application. Its 68–72% win-rate and 53–63¢ entry targets are goals, not proven results. The order-flow score is an uncalibrated heuristic.\n\nSimulation is fully synthetic. Live mode uses public Kalshi data and never falls back to simulated prices. All orders are paper-only. See Strategy lab for the model, costs, and limitations.');
   if (el.id === 'pause-button') { paused = !paused; render(); $('#feed-status').textContent = paused ? 'Display paused · automation unchanged' : 'Reconnecting'; if (!paused) await refresh(true); }
-  if (el.id === 'bot-button') { try { const enabled = !snapshot.automation.enabled; await api('/api/automation', { enabled }); await refresh(true); toast(enabled ? 'Paper bot started. Eligible signals will open simulated positions within your risk limits.' : 'Paper bot stopped. Existing positions remain in the ledger.'); } catch (error) { toast(error.message); } }
+  if (el.id === 'bot-button') { try { const enabled = !snapshot.automation.enabled; await api('/api/automation', { enabled }); await refresh(true); toast(enabled ? (snapshot.automation.error ? 'Paper bot is waiting for market data. See the connection error above.' : 'Paper bot started. See the latest scan and entry blockers above.') : 'Paper bot stopped. Existing positions remain in the ledger.'); } catch (error) { toast(error.message); } }
+  if (el.id === 'retry-feed') { paused = false; await refresh(true); }
   if (el.id === 'export-button') exportCSV();
   if (el.id === 'advance-button') { try { await api('/api/demo/advance', {}); await refresh(true); toast('Simulation advanced 15 minutes. Eligible paper positions settled.'); } catch (error) { toast(error.message); } }
   if (el.id === 'reset-button') { if (confirm(`Delete all ${mode} paper positions? This cannot be undone.`)) { try { await api('/api/reset', {}); await refresh(true); toast('Paper ledger reset.'); } catch (error) { toast(error.message); } } }

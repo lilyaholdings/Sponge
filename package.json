@@ -5,13 +5,14 @@
   "description": "Order-flow research and paper trading terminal for Kalshi short-duration markets",
   "type": "module",
   "engines": {
-    "node": ">=24"
+    "node": ">=24.5.0"
   },
   "scripts": {
     "dev": "node --use-env-proxy --watch server.js",
-    "start": "node --use-env-proxy server.js",
+    "start": "node scripts/launch.js --no-browser",
     "test": "node --test",
-    "check": "node --check server.js && node --check public/app.js && node --check lib/engine.js && node --check lib/feeds.js",
-    "launch": "node scripts/launch.js"
+    "check": "node --check server.js && node --check public/app.js && node --check lib/engine.js && node --check lib/feeds.js && node --check scripts/launch.js && node --check scripts/diagnose.js",
+    "launch": "node scripts/launch.js",
+    "diagnose": "node scripts/diagnose.js"
   }
 }

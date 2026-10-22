@@ -4,7 +4,7 @@ An original, monochrome market-research terminal and paper-trading bot for short
 
 ## Run
 
-Requires **Node.js 24+**.
+Requires **Node.js 24.5+**.
 
 ```sh
 cd /workspace/Sponge
@@ -29,13 +29,13 @@ Tests cover directional symmetry, trade windows, stale/incomplete/crossed books,
 5. **Performance:** inspect realized win rate, average acquisition price, estimated fees, net P&L, and a 95% Wilson interval. Metrics begin empty, with no invented track record.
 6. **Configuration:** adjust signal and risk parameters; optionally add up to six exact financial or other Kalshi market tickers.
 
-The bot starts **disarmed after every server restart**. Display pause stops UI refresh and manual entry, but does not stop the automatic paper bot; use **Stop paper bot** for that. Closing the browser also does not stop an armed server. Settings and positions persist in `.data/state.json`, ignored by Git. `DATA_DIR` can select another storage directory. This is a single-operator application; do not share a writable data directory between server processes.
+The bot starts **disarmed after every server restart**. Display pause stops UI refresh and manual entry, but does not stop the automatic paper bot; use **Stop paper bot** for that. Closing the browser also does not stop an armed server. The running bot displays its last scan: markets scanned, qualified signals, positions opened, and specific entry blockers. A healthy feed with zero qualifying signals is distinct from a disconnected feed. Settings and positions persist in `.data/state.json`, ignored by Git. `DATA_DIR` can select another storage directory. This is a single-operator application; do not share a writable data directory between server processes.
 
 ## Open it on your own computer
 
 A port on the cloud workspace is internal to that machine. The onboarding interface does not provide an exposed website URL, and server processes must restart when the cloud environment is restored.
 
-For local use, extract the portable Chemical X archive and install Node.js 24 or newer. Open `Start Chemical X.command` on macOS, or `Start Chemical X.bat` on Windows. Alternatively, run `npm run launch` from the extracted project folder on macOS, Windows, or Linux. The launcher starts the app on this computer and opens its browser automatically. Keep its terminal open while using the app.
+For local use, extract the portable Chemical X archive and install Node.js 24.5 or newer. Open `Start Chemical X.command` on macOS, or `Start Chemical X.bat` on Windows. Alternatively, run `npm run launch` from the extracted project folder on macOS, Windows, or Linux. The launcher starts the app on this computer and opens its browser automatically. Keep its terminal open while using the app.
 
 The local launcher binds to loopback and defaults to port 4317. It opens the browser only after its own server starts successfully. If the port is occupied, it leaves that service alone and exits; choose a free `PORT` to retry. The portable archive excludes Git metadata and existing paper positions, settings, and credentials. Public hosting is a separate deployment step; no public URL has been created.
 
@@ -63,7 +63,13 @@ The 68% baseline / 72%+ stretch win rate and sub-63¢ / ideally 53¢ average ent
 
 **Kalshi live** uses the public HTTPS API at `api.elections.kalshi.com/trade-api/v2` to discover `KXBTC15M`, `KXETH15M`, and `KXSOL15M`, read order books, and retrieve recent trades. It supports fixed-point and legacy order-book payloads. Exact additional tickers can be configured, and their real closing times and settlement rules apply. Custom markets are not assumed to have a 15-minute horizon. Public data access requires no credentials in this connector.
 
-Live connection failures are displayed explicitly. No synthetic prices are substituted into live mode, and live/demo paper ledgers never mix. During initial verification the cloud proxy denied the Kalshi destination. Its hostname has been requested in the environment configuration draft; live API compatibility and connectivity remain unverified until that access is applied and retested. Book payload transformations are covered by local fixture tests.
+Live connection failures are displayed explicitly. No synthetic prices are substituted into live mode, and live/demo paper ledgers never mix. Initial cloud validation was blocked by the network proxy. A subsequent check successfully retrieved real BTC, ETH, and SOL contracts, order books, and recent trades. Connectivity on another computer must still be verified locally. One failed series, invalid custom ticker, or failed book request now produces a visible warning while healthy markets remain available. A total connection failure shows the endpoint, error code, and a retry control. No simulated quotes are substituted.
+
+## Troubleshooting startup
+
+From the fully extracted project folder, run `npm run diagnose`. This checks the installed runtime, the app files, port availability, server startup, and the dashboard API. It stops only the diagnostic server it starts. Copy its output when reporting a failure; it does not print settings, positions, credentials, or environment-variable values.
+
+Node.js 24.0–24.4 cannot use the required proxy startup flag. Install Node.js 24.5 or newer. The launcher now checks this before starting and keeps errors visible. Extract the entire ZIP before launching; running a launcher from inside an archive leaves its supporting files unavailable.
 
 ## HTTP endpoints
 

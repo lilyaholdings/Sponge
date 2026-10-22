@@ -14,7 +14,7 @@ state.settings = validateSettings(state.settings);
 state.customTickers ||= [];
 state.demoOffset ||= 0;
 function save() { writeFileSync(`${file}.tmp`, JSON.stringify(state, null, 2), { mode: 0o600 }); renameSync(`${file}.tmp`, file); }
-let liveCache = { at: 0, markets: [] }, pendingLive;
+let liveCache = { at: 0, markets: [], warnings: [] }, pendingLive;
 const automation = { demo: { enabled: false, lastScan: null, error: null }, live: { enabled: false, lastScan: null, error: null } };
 let scanning = false;
 async function scan() {
@@ -27,14 +27,19 @@ async function scan() {
         await settle(mode);
         const markets = await getMarkets(mode);
         if (!automation[mode].enabled) continue;
+        automation[mode].report = { scanned: markets.length, qualified: 0, opened: 0, blocked: [] };
+        const report = automation[mode].report;
         const now = Date.now() + (mode === 'demo' ? state.demoOffset : 0);
         for (const market of markets.sort((a, b) => (analyze(b, state.settings, now).edge ?? -100) - (analyze(a, state.settings, now).edge ?? -100))) {
-          if (analyze(market, state.settings, now).state !== 'signal') continue;
-          if (state.positions.some(p => p.mode === mode && p.ticker === market.ticker)) continue;
-          try { state.positions.unshift(openPosition(market, state, mode, now)); save(); } catch { /* Entry gates and risk caps remain authoritative. */ }
+          const signal = analyze(market, state.settings, now);
+          if (signal.state !== 'signal') { report.blocked.push({ ticker: market.ticker, reasons: signal.reasons }); continue; }
+          report.qualified++;
+          if (state.positions.some(p => p.mode === mode && p.ticker === market.ticker)) { report.blocked.push({ ticker: market.ticker, reasons: ['Position already recorded'] }); continue; }
+          try { state.positions.unshift(openPosition(market, state, mode, now)); save(); report.opened++; }
+          catch (error) { report.blocked.push({ ticker: market.ticker, reasons: [error.message] }); }
         }
         automation[mode].lastScan = Date.now(); automation[mode].error = null;
-      } catch (error) { automation[mode].error = error.message; }
+      } catch (error) { automation[mode].error = error.message; automation[mode].lastScan = Date.now(); automation[mode].report = null; }
     }
   } finally { scanning = false; }
 }
@@ -42,7 +47,7 @@ setInterval(scan, 10000).unref();
 async function getMarkets(mode) {
   if (mode === 'demo') return demoMarkets(Date.now() + state.demoOffset);
   if (Date.now() - liveCache.at < 10000) return liveCache.markets;
-  if (!pendingLive) pendingLive = liveMarkets(state.customTickers).then(markets => { liveCache = { at: Date.now(), markets }; return markets; }).finally(() => { pendingLive = null; });
+  if (!pendingLive) pendingLive = liveMarkets(state.customTickers).then(({ markets, warnings }) => { liveCache = { at: Date.now(), markets, warnings }; return markets; }).finally(() => { pendingLive = null; });
   return pendingLive;
 }
 async function settle(mode) {
@@ -79,7 +84,7 @@ const server = http.createServer(async (req, res) => {
       let markets = [], feedError = null;
       try { markets = await getMarkets(mode); } catch (error) { feedError = `Live data unavailable: ${error.message} Check access to api.elections.kalshi.com. No simulated data is substituted.`; }
       const now = Date.now() + (mode === 'demo' ? state.demoOffset : 0);
-      return json(res, 200, { mode, now, feedError, automation: automation[mode], markets: markets.map(m => ({ ...m, signal: analyze(m, state.settings, now) })), settings: state.settings, customTickers: state.customTickers, positions: state.positions.filter(p => p.mode === mode), stats: summarize(state.positions, mode, state.settings.bankroll) });
+      return json(res, 200, { mode, now, feedError, feedWarnings: mode === 'live' && !feedError ? liveCache.warnings : [], automation: automation[mode], markets: markets.map(m => ({ ...m, signal: analyze(m, state.settings, now) })), settings: state.settings, customTickers: state.customTickers, positions: state.positions.filter(p => p.mode === mode), stats: summarize(state.positions, mode, state.settings.bankroll) });
     }
     if (url.pathname === '/api/automation' && req.method === 'POST') {
       const data = await body(req);
